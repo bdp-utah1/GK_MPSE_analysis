@@ -54,8 +54,11 @@ analysis_config <- function(data_mode = NULL, project_root = getwd()) {
     ),
     rules = list(
       score_carry_forward_days = 3L,
+      score_discrepancy_warning_threshold = 1.0,
       hpo_source = "ClinPhen_bulk",
       percentile_cutoff = 50,
+      expected_screened_patients = 314L,
+      expected_reviewed_patients = 254L,
       other_recommendation_result_project_ids = c("8146"),
       wgs_tests = c(
         "WGS", "WGS reanalysis", "rWGS", "rWGS Reanalysis", "urWGS"

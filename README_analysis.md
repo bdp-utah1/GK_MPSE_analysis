@@ -14,6 +14,10 @@ modified.
 - `R/05_scores.R`: reconstructs raw MPSE score at clinical review
 - `R/06_testing.R`: collapses test records to patient-level testing and result summaries
 - `R/07_cohorts.R`: creates the screened and reviewed analytic cohorts
+- `R/08_qc_assertions.R`: required checks and non-blocking QC warnings
+- `R/09_descriptive_tables.R`: cohort, testing, and missingness summaries
+- `R/10_cohort_flow.R`: cohort-flow table and PNG figure
+- `analysis/01_descriptive.R`: descriptive-analysis entry point
 - `run_analysis.R`: entry point
 - `output/qc/`: machine-readable validation summaries
 - `output/data/`, `output/tables/`, `output/figures/`: reserved for later stages
@@ -25,6 +29,16 @@ From the `GK_MPSE_analysis` R project directory:
 ```r
 source("run_analysis.R")
 ```
+
+From a terminal:
+
+```sh
+Rscript run_analysis.R --mode=synthetic
+```
+
+The command writes QC checks to `output/qc/`, analytic extracts to
+`output/data/`, descriptive CSV/HTML tables to `output/tables/`, and the
+cohort-flow figure to `output/figures/`.
 
 The complete de-identified data are the default while the framework is under
 development. The configuration value remains `synthetic` because the supplied
@@ -51,8 +65,8 @@ for review-day grouping.
 
 ## Planned next stages
 
-1. Review the admission, score-discrepancy, and unmapped-result QC files.
-2. Produce the cohort flow and first descriptive tables.
+1. Review the automated checks and descriptive outputs.
+2. Resolve or document remaining warning-level exceptions.
 3. Add exploratory percentile-group testing and turnaround-time figures.
 
 The de-identified dates preserve within-patient intervals but can distort calendar

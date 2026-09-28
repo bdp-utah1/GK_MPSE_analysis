@@ -12,6 +12,9 @@ source(file.path("R", "04_admissions.R"))
 source(file.path("R", "05_scores.R"))
 source(file.path("R", "06_testing.R"))
 source(file.path("R", "07_cohorts.R"))
+source(file.path("R", "08_qc_assertions.R"))
+source(file.path("R", "09_descriptive_tables.R"))
+source(file.path("R", "10_cohort_flow.R"))
 
 arguments <- commandArgs(trailingOnly = TRUE)
 mode_argument <- grep("^--mode=", arguments, value = TRUE)
@@ -69,18 +72,39 @@ purrr::iwalk(derived_qc, function(data, name) {
 
 write_cohort_outputs(cohorts, config)
 
+pipeline_checks <- run_pipeline_checks(
+  sources,
+  cohorts,
+  admission_matches,
+  score_matches,
+  test_summary,
+  config,
+  stop_on_failure = TRUE
+)
+
+descriptive_tables <- build_descriptive_tables(cohorts)
+write_descriptive_tables(descriptive_tables, config)
+
+cohort_flow <- build_cohort_flow(cohorts)
+write_cohort_flow(cohort_flow, config)
+
 analysis_state <- list(
   config = config,
   sources = sources,
   qc = c(qc, derived_qc),
+  pipeline_checks = pipeline_checks,
   admission_matches = admission_matches,
   score_matches = score_matches,
   test_summary = test_summary,
-  cohorts = cohorts
+  cohorts = cohorts,
+  descriptive_tables = descriptive_tables,
+  cohort_flow = cohort_flow
 )
 
 message("Import, derivation, and validation complete.")
 message("QC files: output/qc/")
 message("De-identified analytic extracts: output/data/")
+message("Descriptive tables: output/tables/")
+message("Cohort flow figure: output/figures/cohort_flow.png")
 
 invisible(analysis_state)
