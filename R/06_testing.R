@@ -64,8 +64,21 @@ summarize_test_results <- function(test_results, config) {
       has_classifiable_completed_result = any(
         .data$completed_and_classifiable
       ),
+      has_completed_wgs_result_record = any(
+        .data$is_wgs &
+          !is.na(.data$result_date_date) &
+          !is.na(.data$diagnosis_by_lab)
+      ),
+      has_classifiable_completed_wgs_result = any(
+        .data$is_wgs & .data$completed_and_classifiable
+      ),
       has_unmapped_result = any(
         !is.na(.data$diagnosis_by_lab) & !.data$result_is_classifiable
+      ),
+      has_unmapped_wgs_result = any(
+        !is.na(.data$diagnosis_by_lab) &
+          !.data$result_is_classifiable &
+          .data$is_wgs
       ),
       patient_result = highest_classifiable_result(
         .data$diagnosis_by_lab,

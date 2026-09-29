@@ -94,8 +94,17 @@ build_analysis_cohorts <- function(
       has_classifiable_completed_result = dplyr::coalesce(
         .data$has_classifiable_completed_result, FALSE
       ),
+      has_completed_wgs_result_record = dplyr::coalesce(
+        .data$has_completed_wgs_result_record, FALSE
+      ),
+      has_classifiable_completed_wgs_result = dplyr::coalesce(
+        .data$has_classifiable_completed_wgs_result, FALSE
+      ),
       has_unmapped_result = dplyr::coalesce(
         .data$has_unmapped_result, FALSE
+      ),
+      has_unmapped_wgs_result = dplyr::coalesce(
+        .data$has_unmapped_wgs_result, FALSE
       ),
       gk_enrolled = dplyr::coalesce(
         .data$gk_enrollment_status == "Enrolled", FALSE
@@ -169,7 +178,10 @@ write_cohort_outputs <- function(cohorts, config) {
       primary_test_type,
       has_completed_result_record,
       has_classifiable_completed_result,
+      has_completed_wgs_result_record,
+      has_classifiable_completed_wgs_result,
       has_unmapped_result,
+      has_unmapped_wgs_result,
       patient_result,
       wgs_patient_result,
       days_admission_to_review,

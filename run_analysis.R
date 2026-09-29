@@ -15,6 +15,7 @@ source(file.path("R", "07_cohorts.R"))
 source(file.path("R", "08_qc_assertions.R"))
 source(file.path("R", "09_descriptive_tables.R"))
 source(file.path("R", "10_cohort_flow.R"))
+source(file.path("R", "11_score_regressions.R"))
 
 arguments <- commandArgs(trailingOnly = TRUE)
 mode_argument <- grep("^--mode=", arguments, value = TRUE)
@@ -88,6 +89,9 @@ write_descriptive_tables(descriptive_tables, config)
 cohort_flow <- build_cohort_flow(cohorts)
 write_cohort_flow(cohort_flow, config)
 
+score_regressions <- build_score_regression_analysis(cohorts, config)
+write_score_regression_analysis(score_regressions, config)
+
 analysis_state <- list(
   config = config,
   sources = sources,
@@ -98,7 +102,8 @@ analysis_state <- list(
   test_summary = test_summary,
   cohorts = cohorts,
   descriptive_tables = descriptive_tables,
-  cohort_flow = cohort_flow
+  cohort_flow = cohort_flow,
+  score_regressions = score_regressions
 )
 
 message("Import, derivation, and validation complete.")
@@ -106,5 +111,6 @@ message("QC files: output/qc/")
 message("De-identified analytic extracts: output/data/")
 message("Descriptive tables: output/tables/")
 message("Cohort flow figure: output/figures/cohort_flow.png")
+message("Score regression outputs: output/tables/ and output/figures/")
 
 invisible(analysis_state)
