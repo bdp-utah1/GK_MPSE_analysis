@@ -49,6 +49,9 @@ analysis_config <- function(data_mode = NULL, project_root = getwd()) {
     dates = list(
       study_start = as.Date("2025-08-11"),
       study_end = as.Date("2026-06-02"),
+      admission_cutoff = as.Date("2026-06-02"),
+      last_review_date = as.Date("2026-06-02"),
+      startup_backlog_end = as.Date("2025-08-18"),
       implementation_change = as.Date("2025-10-30"),
       data_freeze = as.Date("2026-09-01")
     ),

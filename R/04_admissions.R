@@ -115,3 +115,51 @@ make_admission_qc <- function(admission_matches) {
       review_flag = .data$admission_match_review_flag
     )
 }
+
+make_admission_match_manifest <- function(admission_matches) {
+  admission_matches$selected |>
+    dplyr::transmute(
+      patient_id = .data$patient_id,
+      project_id = .data$project_id,
+      reviewed = .data$reviewed,
+      target_date = .data$target_date,
+      target_date_source = .data$target_date_source,
+      selected_unit = .data$selected_unit,
+      selected_arrive_dtm = .data$selected_arrive_dtm,
+      selected_dischg_dtm = .data$selected_dischg_dtm,
+      selected_arrive_date = .data$selected_arrive_date,
+      selected_dischg_date = .data$selected_dischg_date,
+      admission_match_method = .data$admission_match_method,
+      arrival_distance_days = .data$arrival_distance_days,
+      unit_priority = .data$unit_priority,
+      same_start_date = .data$same_start_date,
+      recorded_interval_overlap = .data$recorded_interval_overlap,
+      admission_candidate_count = .data$admission_candidate_count,
+      nearest_arrival_distance_days = .data$nearest_arrival_distance_days,
+      nearest_arrival_candidate_count =
+        .data$nearest_arrival_candidate_count,
+      recorded_interval_overlap_count =
+        .data$recorded_interval_overlap_count,
+      admission_match_review_flag = .data$admission_match_review_flag
+    ) |>
+    dplyr::arrange(.data$patient_id)
+}
+
+write_admission_match_manifest <- function(admission_matches, config) {
+  manifest <- make_admission_match_manifest(admission_matches)
+
+  if (nrow(manifest) != dplyr::n_distinct(manifest$patient_id)) {
+    stop(
+      "The admission-matching manifest does not contain one row per patient.",
+      call. = FALSE
+    )
+  }
+
+  readr::write_csv(
+    manifest,
+    file.path(config$output_dirs$data, "admission_match_manifest.csv"),
+    na = ""
+  )
+
+  manifest
+}

@@ -20,7 +20,8 @@ make_model_spec <- function(
     source_population_n,
     unavailable_outcome_n = 0L,
     preexisting_excluded_n = 0L,
-    unmatched_result_excluded_n = 0L) {
+    unmatched_result_excluded_n = 0L,
+    analysis_stratum = "Overall") {
   list(
     model_id = model_id,
     outcome_label = outcome_label,
@@ -32,7 +33,8 @@ make_model_spec <- function(
     preexisting_excluded_n = as.integer(preexisting_excluded_n),
     unmatched_result_excluded_n = as.integer(
       unmatched_result_excluded_n
-    )
+    ),
+    analysis_stratum = analysis_stratum
   )
 }
 
@@ -88,8 +90,18 @@ make_timing_spec <- function(
   )
 }
 
-build_score_model_specs <- function(reviewed, config) {
+build_score_model_specs_for_stratum <- function(
+    reviewed,
+    config,
+    analysis_stratum) {
   data <- prepare_score_regression_data(reviewed, config)
+
+  any_testing_at_risk <- data |>
+    dplyr::filter(.data$eligible_for_post_review_any_test)
+  wgs_at_risk <- data |>
+    dplyr::filter(.data$eligible_for_post_review_wgs)
+  gk_at_risk <- data |>
+    dplyr::filter(.data$eligible_for_post_review_gk_enrollment)
 
   all_completed <- data |>
     dplyr::filter(.data$has_completed_result_record)
@@ -142,20 +154,33 @@ build_score_model_specs <- function(reviewed, config) {
       is.na(gk_completed$wgs_patient_result)
   )
 
-  test_timing_population <- data |>
-    dplyr::filter(.data$has_any_test)
-
-  list(
+  specs <- list(
     make_binary_spec(
-      data, "any_testing", "Any genetic testing", "All reviewed patients",
-      "has_any_test"
+      any_testing_at_risk,
+      "post_review_any_testing",
+      "Any genetic testing after review",
+      "Patients without pre-review genetic testing",
+      "post_review_any_test",
+      source_population_n = nrow(any_testing_at_risk),
+      unavailable_outcome_n = sum(
+        is.na(any_testing_at_risk$post_review_any_test)
+      )
     ),
     make_binary_spec(
-      data, "wgs_testing", "WGS", "All reviewed patients", "has_wgs"
+      wgs_at_risk,
+      "post_review_wgs",
+      "WGS after review",
+      "Patients without pre-review WGS",
+      "post_review_wgs",
+      source_population_n = nrow(wgs_at_risk),
+      unavailable_outcome_n = sum(is.na(wgs_at_risk$post_review_wgs))
     ),
     make_binary_spec(
-      data, "gk_enrollment", "GK enrollment", "All reviewed patients",
-      "gk_enrolled"
+      gk_at_risk,
+      "post_review_gk_enrollment",
+      "GK enrollment after review",
+      "Patients not enrolled before review",
+      "post_review_gk_enrollment"
     ),
     make_binary_spec(
       all_diagnostic,
@@ -204,8 +229,8 @@ build_score_model_specs <- function(reviewed, config) {
     make_binary_spec(
       gk_diagnostic,
       "positive_gk_result",
-      "Positive GK WGS result",
-      "GK-enrolled patients with completed WGS results",
+      "Positive WGS result among GK-enrolled patients",
+      "GK-enrolled patients with official WGS results",
       "positive_gk_result",
       source_population_n = nrow(gk_completed),
       unavailable_outcome_n = gk_unavailable,
@@ -216,14 +241,28 @@ build_score_model_specs <- function(reviewed, config) {
     make_binary_spec(
       gk_diagnostic,
       "uncertain_gk_result",
-      "Uncertain GK WGS result",
-      "GK-enrolled patients with completed WGS results",
+      "Uncertain WGS result among GK-enrolled patients",
+      "GK-enrolled patients with official WGS results",
       "uncertain_gk_result",
       source_population_n = nrow(gk_completed),
       unavailable_outcome_n = gk_unavailable,
       unmatched_result_excluded_n = sum(
         gk_completed$has_unmapped_wgs_result
       )
+    ),
+    make_timing_spec(
+      data,
+      "admission_to_genetics_consult",
+      "Admission to documented Genetics consultation",
+      "All reviewed patients",
+      "days_admission_to_genetics_consult"
+    ),
+    make_timing_spec(
+      data,
+      "review_to_genetics_consult",
+      "Clinical review to documented Genetics consultation",
+      "All reviewed patients",
+      "days_review_to_genetics_consult"
     ),
     make_timing_spec(
       data,
@@ -240,20 +279,70 @@ build_score_model_specs <- function(reviewed, config) {
       "days_review_to_referral"
     ),
     make_timing_spec(
-      test_timing_population,
-      "admission_to_test_order",
-      "Admission to primary test order",
-      "Patients with any testing record",
-      "days_admission_to_test_order"
+      any_testing_at_risk,
+      "admission_to_post_review_any_order",
+      "Admission to post-review genetic test order",
+      "Patients without pre-review genetic testing",
+      "days_admission_to_post_review_any_order"
     ),
     make_timing_spec(
-      test_timing_population,
-      "review_to_test_order",
-      "Clinical review to primary test order",
-      "Patients with any testing record",
-      "days_review_to_test_order"
+      any_testing_at_risk,
+      "review_to_post_review_any_order",
+      "Clinical review to post-review genetic test order",
+      "Patients without pre-review genetic testing",
+      "days_review_to_post_review_any_order"
+    ),
+    make_timing_spec(
+      wgs_at_risk,
+      "admission_to_post_review_wgs_order",
+      "Admission to post-review WGS order",
+      "Patients without pre-review WGS",
+      "days_admission_to_post_review_wgs_order"
+    ),
+    make_timing_spec(
+      wgs_at_risk,
+      "review_to_post_review_wgs_order",
+      "Clinical review to post-review WGS order",
+      "Patients without pre-review WGS",
+      "days_review_to_post_review_wgs_order"
     )
   )
+
+  purrr::map(specs, function(spec) {
+    spec$analysis_stratum <- analysis_stratum
+    spec
+  })
+}
+
+build_score_model_specs <- function(reviewed, config) {
+  overall <- build_score_model_specs_for_stratum(
+    reviewed,
+    config,
+    "Overall"
+  )
+  initial_phase <- build_score_model_specs_for_stratum(
+    reviewed |>
+      dplyr::filter(
+        .data$implementation_phase == "Initial threshold-based phase"
+      ),
+    config,
+    "Initial threshold-based phase"
+  )
+  expanded_phase <- build_score_model_specs_for_stratum(
+    reviewed |>
+      dplyr::filter(.data$implementation_phase == "Expanded review phase"),
+    config,
+    "Expanded review phase"
+  )
+  non_backlog <- build_score_model_specs_for_stratum(
+    reviewed |>
+      dplyr::filter(!.data$startup_backlog_patient),
+    config,
+    "Overall excluding startup backlog"
+  ) |>
+    purrr::keep(~ stringr::str_starts(.x$model_id, "admission_to_"))
+
+  c(overall, initial_phase, expanded_phase, non_backlog)
 }
 
 score_predictor_specs <- function() {
@@ -374,6 +463,7 @@ fit_score_model <- function(spec, predictor_spec, config) {
 
   tibble::tibble(
     model_id = spec$model_id,
+    analysis_stratum = spec$analysis_stratum,
     outcome = spec$outcome_label,
     population = spec$population_label,
     model_type = spec$model_type,
@@ -423,6 +513,7 @@ make_score_model_population_audit <- function(specs) {
   purrr::map_dfr(specs, function(spec) {
     tibble::tibble(
       model_id = spec$model_id,
+      analysis_stratum = spec$analysis_stratum,
       outcome = spec$outcome_label,
       source_population = spec$population_label,
       source_population_n = spec$source_population_n,
@@ -440,6 +531,7 @@ summarize_score_group <- function(data, spec, group_label) {
     denominator <- nrow(data)
     tibble::tibble(
       model_id = spec$model_id,
+      analysis_stratum = spec$analysis_stratum,
       outcome = spec$outcome_label,
       model_type = spec$model_type,
       percentile_group = group_label,
@@ -458,19 +550,23 @@ summarize_score_group <- function(data, spec, group_label) {
     )
   } else {
     values <- data$model_outcome
+    if (length(values) == 0L) {
+      values <- NA_real_
+    }
     tibble::tibble(
       model_id = spec$model_id,
+      analysis_stratum = spec$analysis_stratum,
       outcome = spec$outcome_label,
       model_type = spec$model_type,
       percentile_group = group_label,
-      n = length(values),
+      n = sum(!is.na(values)),
       events = NA_integer_,
       percent = NA_real_,
-      mean = mean(values),
-      standard_deviation = stats::sd(values),
-      median = stats::median(values),
-      q1 = stats::quantile(values, 0.25, names = FALSE),
-      q3 = stats::quantile(values, 0.75, names = FALSE)
+      mean = mean(values, na.rm = TRUE),
+      standard_deviation = stats::sd(values, na.rm = TRUE),
+      median = stats::median(values, na.rm = TRUE),
+      q1 = stats::quantile(values, 0.25, names = FALSE, na.rm = TRUE),
+      q3 = stats::quantile(values, 0.75, names = FALSE, na.rm = TRUE)
     )
   }
 }
@@ -510,10 +606,20 @@ make_score_group_descriptives <- function(specs) {
 make_timing_status_table <- function(reviewed) {
   timing_variables <- tibble::tribble(
     ~interval_variable, ~outcome,
+    "days_admission_to_genetics_consult",
+      "Admission to documented Genetics consultation",
+    "days_review_to_genetics_consult",
+      "Clinical review to documented Genetics consultation",
     "days_admission_to_referral", "Admission to GK referral",
     "days_review_to_referral", "Clinical review to GK referral",
-    "days_admission_to_test_order", "Admission to primary test order",
-    "days_review_to_test_order", "Clinical review to primary test order"
+    "days_admission_to_post_review_any_order",
+      "Admission to post-review genetic test order",
+    "days_review_to_post_review_any_order",
+      "Clinical review to post-review genetic test order",
+    "days_admission_to_post_review_wgs_order",
+      "Admission to post-review WGS order",
+    "days_review_to_post_review_wgs_order",
+      "Clinical review to post-review WGS order"
   )
 
   purrr::map_dfr(seq_len(nrow(timing_variables)), function(index) {
@@ -549,6 +655,7 @@ make_timing_status_table <- function(reviewed) {
 make_score_regression_plots <- function(results) {
   binary_data <- results |>
     dplyr::filter(
+      .data$analysis_stratum == "Overall",
       .data$model_type == "Binary",
       .data$status == "Estimated",
       is.finite(.data$estimate),
@@ -557,6 +664,7 @@ make_score_regression_plots <- function(results) {
     )
   timing_data <- results |>
     dplyr::filter(
+      .data$analysis_stratum == "Overall",
       .data$model_type == "Continuous",
       .data$status == "Estimated",
       is.finite(.data$estimate),
@@ -631,8 +739,14 @@ make_score_regression_plots <- function(results) {
 }
 
 make_score_regression_checks <- function(results, population_audit) {
+  result_keys <- paste(results$analysis_stratum, results$model_id, sep = "::")
+  audit_keys <- paste(
+    population_audit$analysis_stratum,
+    population_audit$model_id,
+    sep = "::"
+  )
   expected_analysis_n <- population_audit$analysis_n[
-    match(results$model_id, population_audit$model_id)
+    match(result_keys, audit_keys)
   ]
   population_reconciliation_failures <- population_audit |>
     dplyr::filter(

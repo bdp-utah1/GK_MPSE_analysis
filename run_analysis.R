@@ -44,7 +44,11 @@ score_matches <- match_scores_at_review(
   sources$mpse_scores,
   config
 )
-test_summary <- summarize_test_results(sources$test_results, config)
+test_summary <- summarize_test_results(
+  sources$test_results,
+  sources$reviewed_patients,
+  config
+)
 cohorts <- build_analysis_cohorts(
   sources,
   admission_matches,
@@ -58,6 +62,7 @@ derived_qc <- list(
   score_discrepancies = make_score_qc(score_matches),
   unmapped_result_values = test_summary$result_value_qc,
   missing_test_names = test_summary$test_name_qc,
+  test_records_after_data_freeze = test_summary$after_freeze_qc,
   test_record_count_mismatches = reconcile_test_record_counts(
     sources$reviewed_patients,
     test_summary$patient_summary
@@ -72,6 +77,10 @@ purrr::iwalk(derived_qc, function(data, name) {
 })
 
 write_cohort_outputs(cohorts, config)
+admission_match_manifest <- write_admission_match_manifest(
+  admission_matches,
+  config
+)
 
 pipeline_checks <- run_pipeline_checks(
   sources,
@@ -98,6 +107,7 @@ analysis_state <- list(
   qc = c(qc, derived_qc),
   pipeline_checks = pipeline_checks,
   admission_matches = admission_matches,
+  admission_match_manifest = admission_match_manifest,
   score_matches = score_matches,
   test_summary = test_summary,
   cohorts = cohorts,

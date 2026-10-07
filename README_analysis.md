@@ -42,6 +42,11 @@ The command writes QC checks to `output/qc/`, analytic extracts to
 `output/data/`, descriptive and regression CSV/HTML tables to `output/tables/`,
 and cohort-flow and regression figures to `output/figures/`.
 
+`output/data/admission_match_manifest.csv` contains one row per screened patient
+with the admission-matching target, selected admission, ranking fields, candidate
+counts, and review flag. It intentionally retains patient linkage so the selected
+admission can be joined back into patient-level analyses.
+
 The complete de-identified data are the default while the framework is under
 development. The configuration value remains `synthetic` because the supplied
 filenames retain that prefix.
@@ -73,14 +78,26 @@ authoritative percentile. It reports the clinical implementation comparison
 percentile points, and a parallel reconstructed raw-score analysis per 10 score
 points. All models are unadjusted and exploratory.
 
-Binary testing and result outcomes use logistic regression. Observed nonnegative
-referral and test-order intervals use linear regression. Patients without an
-event/date are not assigned a censoring time, so these are not survival models.
-Pre-existing events are excluded from timing regressions and tabulated
-separately. Patients with unmatched result values are excluded from the relevant
-diagnostic-result models until those values are adjudicated. Models with a zero
-cell or insufficient outcome variation are reported as not estimable by ordinary
-logistic regression rather than displaying unstable odds ratios.
+Binary testing and result outcomes use logistic regression. Testing outcomes are
+post-review outcomes: same-day orders count as post-review, the any-testing risk
+set excludes patients with any pre-review test, and the WGS risk set excludes only
+patients with pre-review WGS. Orders with missing dates remain temporally unknown.
+Observed nonnegative consultation, referral, and test-order intervals use linear
+regression. Patients without a documented event/date are not assigned a censoring
+time, so these are not survival models. Pre-existing events are excluded from
+timing regressions and tabulated separately.
+
+A nonmissing laboratory classification is an official result even when the result
+date is missing; the missing date only prevents result-turnaround analysis.
+Patients with unmatched result values are excluded from the relevant diagnostic-
+result models until those values are adjudicated. Models with a zero cell or
+insufficient outcome variation are reported as not estimable by ordinary logistic
+regression rather than displaying unstable odds ratios.
+
+June 2, 2026 is the inclusive admission and clinical-review cutoff. Follow-up
+outcomes through September 1, 2026 are included. Results are reported overall and
+by implementation phase. Admission-based timing outcomes also include a
+sensitivity population excluding the startup backlog.
 
 The de-identified dates preserve within-patient intervals but can distort calendar
 phase, backlog, and monthly-volume assignments. Those fields are retained for code

@@ -43,10 +43,24 @@ make_cohort_accounting_table <- function(cohorts) {
   n_wgs <- sum(reviewed$has_wgs)
   n_gk <- sum(reviewed$gk_enrolled)
   n_completed <- sum(reviewed$has_completed_result_record)
-  n_classifiable <- sum(reviewed$has_classifiable_completed_result)
-  n_positive <- sum(reviewed$patient_result == "Positive", na.rm = TRUE)
-  n_uncertain <- sum(reviewed$patient_result == "Uncertain", na.rm = TRUE)
-  n_negative <- sum(reviewed$patient_result == "Negative", na.rm = TRUE)
+  adjudicated_result_population <- reviewed |>
+    dplyr::filter(
+      .data$has_classifiable_completed_result,
+      !.data$has_unmapped_result
+    )
+  n_classifiable <- nrow(adjudicated_result_population)
+  n_positive <- sum(
+    adjudicated_result_population$patient_result == "Positive",
+    na.rm = TRUE
+  )
+  n_uncertain <- sum(
+    adjudicated_result_population$patient_result == "Uncertain",
+    na.rm = TRUE
+  )
+  n_negative <- sum(
+    adjudicated_result_population$patient_result == "Negative",
+    na.rm = TRUE
+  )
 
   dplyr::bind_rows(
     make_count_row("Cohort", "Screened by MPSE", n_screened),
@@ -67,14 +81,14 @@ make_cohort_accounting_table <- function(cohorts) {
     ),
     make_count_row(
       "Results",
-      "Completed result record",
+      "Official result classification",
       n_completed,
       n_tested,
       "Tested"
     ),
     make_count_row(
       "Results",
-      "Completed and classifiable result",
+      "Classifiable result without unmatched values",
       n_classifiable,
       n_tested,
       "Tested"
@@ -84,21 +98,21 @@ make_cohort_accounting_table <- function(cohorts) {
       "Positive",
       n_positive,
       n_classifiable,
-      "Completed and classifiable results"
+      "Classifiable results without unmatched values"
     ),
     make_count_row(
       "Diagnostic result",
       "Uncertain",
       n_uncertain,
       n_classifiable,
-      "Completed and classifiable results"
+      "Classifiable results without unmatched values"
     ),
     make_count_row(
       "Diagnostic result",
       "Negative",
       n_negative,
       n_classifiable,
-      "Completed and classifiable results"
+      "Classifiable results without unmatched values"
     )
   )
 }
@@ -249,8 +263,8 @@ make_reviewed_characteristics_table <- function(cohorts) {
         TRUE ~ "No testing record"
       ),
       result_summary = dplyr::case_when(
+        .data$has_unmapped_result ~ "Unmatched result value",
         !is.na(.data$patient_result) ~ .data$patient_result,
-        .data$has_unmapped_result ~ "Unmapped result value",
         .data$has_completed_result_record ~
           "Completed result without classifiable value",
         .data$has_any_test ~ "Pending or incomplete result",
@@ -314,6 +328,21 @@ make_reviewed_characteristics_table <- function(cohorts) {
       data,
       "result_summary",
       "Patient-level result"
+    ),
+    summarize_categorical_by_group(
+      data,
+      "implementation_phase",
+      "Implementation phase"
+    ),
+    summarize_categorical_by_group(
+      data,
+      "genetics_consult_timing",
+      "Documented Genetics consultation timing"
+    ),
+    summarize_categorical_by_group(
+      data,
+      "gk_referral_timing",
+      "Documented GK referral timing"
     )
   ) |>
     dplyr::arrange(
@@ -335,7 +364,22 @@ make_testing_diagnostic_table <- function(cohorts) {
   reviewed <- cohorts$reviewed
   n_reviewed <- nrow(reviewed)
   n_tested <- sum(reviewed$has_any_test)
-  n_classifiable <- sum(reviewed$has_classifiable_completed_result)
+  diagnostic_population <- reviewed |>
+    dplyr::filter(
+      .data$has_classifiable_completed_result,
+      !.data$has_unmapped_result
+    )
+  n_classifiable <- nrow(diagnostic_population)
+  any_test_at_risk <- reviewed |>
+    dplyr::filter(.data$eligible_for_post_review_any_test)
+  any_test_known <- any_test_at_risk |>
+    dplyr::filter(!is.na(.data$post_review_any_test))
+  wgs_at_risk <- reviewed |>
+    dplyr::filter(.data$eligible_for_post_review_wgs)
+  wgs_known <- wgs_at_risk |>
+    dplyr::filter(!is.na(.data$post_review_wgs))
+  gk_at_risk <- reviewed |>
+    dplyr::filter(.data$eligible_for_post_review_gk_enrollment)
 
   dplyr::bind_rows(
     make_count_row(
@@ -346,10 +390,45 @@ make_testing_diagnostic_table <- function(cohorts) {
     ),
     make_count_row(
       "Testing uptake",
-      "Non-WGS testing",
+      "Any non-WGS testing",
       sum(reviewed$has_non_wgs),
       n_reviewed,
       "Reviewed"
+    ),
+    make_count_row(
+      "Post-review uptake",
+      "Any testing after review",
+      sum(any_test_known$post_review_any_test),
+      nrow(any_test_known),
+      "No pre-review testing and known order timing"
+    ),
+    make_count_row(
+      "Post-review uptake",
+      "Any-test timing unknown",
+      sum(is.na(any_test_at_risk$post_review_any_test)),
+      nrow(any_test_at_risk),
+      "No pre-review testing"
+    ),
+    make_count_row(
+      "Post-review uptake",
+      "WGS after review",
+      sum(wgs_known$post_review_wgs),
+      nrow(wgs_known),
+      "No pre-review WGS and known WGS order timing"
+    ),
+    make_count_row(
+      "Post-review uptake",
+      "WGS timing unknown",
+      sum(is.na(wgs_at_risk$post_review_wgs)),
+      nrow(wgs_at_risk),
+      "No pre-review WGS"
+    ),
+    make_count_row(
+      "Post-review uptake",
+      "GK enrollment after review",
+      sum(gk_at_risk$post_review_gk_enrollment),
+      nrow(gk_at_risk),
+      "Not enrolled before review"
     ),
     make_count_row(
       "Testing uptake",
@@ -360,21 +439,21 @@ make_testing_diagnostic_table <- function(cohorts) {
     ),
     make_count_row(
       "Result availability",
-      "Completed result record",
+      "Official result classification",
       sum(reviewed$has_completed_result_record),
       n_tested,
       "Tested"
     ),
     make_count_row(
       "Result availability",
-      "Completed and classifiable result",
+      "Classifiable result without unmatched values",
       n_classifiable,
       n_tested,
       "Tested"
     ),
     make_count_row(
       "Result availability",
-      "Unmapped result value",
+      "Unmatched result value",
       sum(reviewed$has_unmapped_result),
       n_tested,
       "Tested"
@@ -382,23 +461,23 @@ make_testing_diagnostic_table <- function(cohorts) {
     make_count_row(
       "Diagnostic result",
       "Positive",
-      sum(reviewed$patient_result == "Positive", na.rm = TRUE),
+      sum(diagnostic_population$patient_result == "Positive", na.rm = TRUE),
       n_classifiable,
-      "Completed and classifiable results"
+      "Classifiable results without unmatched values"
     ),
     make_count_row(
       "Diagnostic result",
       "Uncertain",
-      sum(reviewed$patient_result == "Uncertain", na.rm = TRUE),
+      sum(diagnostic_population$patient_result == "Uncertain", na.rm = TRUE),
       n_classifiable,
-      "Completed and classifiable results"
+      "Classifiable results without unmatched values"
     ),
     make_count_row(
       "Diagnostic result",
       "Negative",
-      sum(reviewed$patient_result == "Negative", na.rm = TRUE),
+      sum(diagnostic_population$patient_result == "Negative", na.rm = TRUE),
       n_classifiable,
-      "Completed and classifiable results"
+      "Classifiable results without unmatched values"
     )
   )
 }
@@ -407,6 +486,10 @@ make_missingness_table <- function(cohorts) {
   reviewed <- cohorts$reviewed
   tested <- reviewed |>
     dplyr::filter(.data$has_any_test)
+  official_results <- reviewed |>
+    dplyr::filter(.data$has_completed_result_record)
+  status_enrolled <- reviewed |>
+    dplyr::filter(.data$gk_enrollment_status == "Enrolled")
 
   missingness_row <- function(data, variable, label, population) {
     n_missing <- sum(is.na(data[[variable]]))
@@ -417,6 +500,27 @@ make_missingness_table <- function(cohorts) {
       label = label,
       n_missing = n_missing,
       denominator = denominator,
+      percent_missing = dplyr::if_else(
+        denominator > 0L,
+        100 * n_missing / denominator,
+        NA_real_
+      ),
+      display = format_n_percent(n_missing, denominator)
+    )
+  }
+
+  missingness_count_row <- function(
+      variable,
+      label,
+      population,
+      n_missing,
+      denominator) {
+    tibble::tibble(
+      population = population,
+      variable = variable,
+      label = label,
+      n_missing = as.integer(n_missing),
+      denominator = as.integer(denominator),
       percent_missing = dplyr::if_else(
         denominator > 0L,
         100 * n_missing / denominator,
@@ -440,36 +544,73 @@ make_missingness_table <- function(cohorts) {
       "Reviewed"
     ),
     missingness_row(
-      reviewed,
-      "mpse_genetic_consult_date_date",
-      "Genetics consultation date",
-      "Reviewed"
-    ),
-    missingness_row(
-      reviewed,
-      "gk_referral_received_date_date",
-      "GK referral received date",
-      "Reviewed"
-    ),
-    missingness_row(
-      reviewed,
-      "gk_enrollment_status",
-      "GK enrollment status",
-      "Reviewed"
-    ),
-    missingness_row(
-      reviewed,
+      status_enrolled,
       "gk_enrollment_date_date",
-      "GK enrollment date",
-      "Reviewed"
+      "Enrollment date among records marked Enrolled",
+      "Status marked Enrolled"
     ),
     missingness_row(
       tested,
       "primary_order_date",
       "Primary test order date",
       "Tested"
+    ),
+    missingness_count_row(
+      "result_date_date",
+      "Patients with at least one official result missing its result date",
+      "Official result available",
+      sum(official_results$has_official_result_missing_date),
+      nrow(official_results)
     )
   )
+}
+
+make_event_documentation_table <- function(cohorts) {
+  reviewed <- cohorts$reviewed |>
+    dplyr::mutate(
+      enrollment_timing = dplyr::case_when(
+        .data$gk_enrolled_before_review ~ "Pre-review",
+        .data$post_review_gk_enrollment ~ "Post-review",
+        TRUE ~ "Not enrolled"
+      )
+    )
+
+  event_rows <- list(
+    genetics_consult_timing = "Documented Genetics consultation",
+    gk_referral_timing = "Documented GK referral",
+    enrollment_timing = "GK enrollment"
+  )
+
+  purrr::imap_dfr(event_rows, function(label, variable) {
+    reviewed |>
+      dplyr::count(.data[[variable]], name = "n") |>
+      dplyr::mutate(
+        event = label,
+        status = .data[[variable]],
+        denominator = nrow(reviewed),
+        percent = 100 * .data$n / .data$denominator,
+        .before = 1
+      ) |>
+      dplyr::select(-dplyr::all_of(variable))
+  })
+}
+
+make_phase_backlog_table <- function(cohorts) {
+  cohorts$reviewed |>
+    dplyr::mutate(
+      backlog_category = dplyr::case_when(
+        .data$startup_backlog_patient ~ "Startup backlog (first review week)",
+        .data$prestudy_admission_reviewed_later ~
+          "Pre-study admission reviewed later",
+        TRUE ~ "Admitted on or after study start"
+      )
+    ) |>
+    dplyr::count(
+      .data$implementation_phase,
+      .data$backlog_category,
+      .data$review_percentile_group,
+      name = "n"
+    )
 }
 
 build_descriptive_tables <- function(cohorts) {
@@ -478,7 +619,9 @@ build_descriptive_tables <- function(cohorts) {
     screened_characteristics = make_screened_characteristics_table(cohorts),
     reviewed_characteristics = make_reviewed_characteristics_table(cohorts),
     testing_diagnostic_summary = make_testing_diagnostic_table(cohorts),
-    key_field_missingness = make_missingness_table(cohorts)
+    key_field_missingness = make_missingness_table(cohorts),
+    event_documentation = make_event_documentation_table(cohorts),
+    phase_backlog_summary = make_phase_backlog_table(cohorts)
   )
 }
 

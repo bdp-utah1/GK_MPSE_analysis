@@ -8,13 +8,32 @@ build_cohort_flow <- function(cohorts) {
     not_reviewed = nrow(screened) - nrow(reviewed),
     tested = sum(reviewed$has_any_test),
     not_tested = sum(!reviewed$has_any_test),
-    classifiable = sum(reviewed$has_classifiable_completed_result),
-    not_classifiable = sum(
-      reviewed$has_any_test & !reviewed$has_classifiable_completed_result
+    classifiable = sum(
+      reviewed$has_classifiable_completed_result &
+        !reviewed$has_unmapped_result
     ),
-    positive = sum(reviewed$patient_result == "Positive", na.rm = TRUE),
-    uncertain = sum(reviewed$patient_result == "Uncertain", na.rm = TRUE),
-    negative = sum(reviewed$patient_result == "Negative", na.rm = TRUE),
+    not_classifiable = sum(
+      reviewed$has_any_test &
+        !(
+          reviewed$has_classifiable_completed_result &
+            !reviewed$has_unmapped_result
+        )
+    ),
+    positive = sum(
+      reviewed$patient_result == "Positive" &
+        !reviewed$has_unmapped_result,
+      na.rm = TRUE
+    ),
+    uncertain = sum(
+      reviewed$patient_result == "Uncertain" &
+        !reviewed$has_unmapped_result,
+      na.rm = TRUE
+    ),
+    negative = sum(
+      reviewed$patient_result == "Negative" &
+        !reviewed$has_unmapped_result,
+      na.rm = TRUE
+    ),
     wgs = sum(reviewed$has_wgs),
     gk_enrolled = sum(reviewed$gk_enrolled)
   )
@@ -51,14 +70,14 @@ build_cohort_flow <- function(cohorts) {
     ),
     make_count_row(
       "Results",
-      "Completed and classifiable result",
+      "Classifiable result without unmatched values",
       counts$classifiable,
       counts$tested,
       "Tested"
     ),
     make_count_row(
       "Results",
-      "No completed classifiable result",
+      "No adjudicated classifiable result",
       counts$not_classifiable,
       counts$tested,
       "Tested"
@@ -107,9 +126,9 @@ build_cohort_flow <- function(cohorts) {
     "not_reviewed", "Not reviewed", 2, -1.2, counts$not_reviewed,
     "tested", "Any genetic testing", 3, 2.0, counts$tested,
     "not_tested", "No testing record", 3, 0.3, counts$not_tested,
-    "classifiable", "Completed and\nclassifiable result", 4, 2.8,
+    "classifiable", "Classifiable result without\nunmatched values", 4, 2.8,
       counts$classifiable,
-    "not_classifiable", "No completed\nclassifiable result", 4, 1.2,
+    "not_classifiable", "No adjudicated\nclassifiable result", 4, 1.2,
       counts$not_classifiable,
     "positive", "Positive", 5, 3.6, counts$positive,
     "uncertain", "Uncertain", 5, 2.8, counts$uncertain,
@@ -196,7 +215,7 @@ build_cohort_flow <- function(cohorts) {
     ggplot2::labs(
       title = "MPSE implementation cohort flow",
       subtitle = paste0(
-        "Diagnostic-result categories use completed, classifiable results only"
+        "Diagnostic-result categories exclude patients with unmatched values"
       )
     ) +
     ggplot2::theme_void(base_size = 12) +

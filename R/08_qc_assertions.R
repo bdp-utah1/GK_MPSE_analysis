@@ -73,6 +73,35 @@ build_pipeline_checks <- function(
   tested_without_primary_order_date <- reviewed |>
     dplyr::filter(.data$has_any_test, is.na(.data$primary_order_date)) |>
     nrow()
+  official_results_without_date <- reviewed |>
+    dplyr::filter(.data$has_official_result_missing_date) |>
+    nrow()
+  enrollment_date_inconsistencies <- reviewed |>
+    dplyr::filter(
+      dplyr::coalesce(.data$gk_enrollment_status == "Enrolled", FALSE) !=
+        !is.na(.data$gk_enrollment_date_date)
+    ) |>
+    nrow()
+  reviewed_after_cutoff <- if (config$data_mode == "real") {
+    sources$reviewed_patients |>
+      dplyr::filter(
+        (!is.na(.data$mpse_admit_date_date) &
+          .data$mpse_admit_date_date > config$dates$admission_cutoff) |
+          (!is.na(.data$mpse_review_date_date) &
+            .data$mpse_review_date_date > config$dates$last_review_date)
+      ) |>
+      nrow()
+  } else {
+    0L
+  }
+  first_week_review_count <- reviewed |>
+    dplyr::filter(
+      .data$mpse_review_date_date >= config$dates$study_start,
+      .data$mpse_review_date_date <= config$dates$startup_backlog_end
+    ) |>
+    nrow()
+  startup_backlog_count <- sum(reviewed$startup_backlog_patient)
+  after_freeze_record_count <- nrow(test_summary$after_freeze_qc)
   reviewed_not_in_screened <- sum(
     !sources$reviewed_patients$mrn %in% sources$mpse_patients$patient_id
   )
@@ -162,6 +191,27 @@ build_pipeline_checks <- function(
       "One or more reviewed patients lack a derived recommendation result."
     ),
     make_pipeline_check(
+      "enrollment_status_date_consistent",
+      "Gene Kids enrollment",
+      "ERROR",
+      enrollment_date_inconsistencies == 0L,
+      enrollment_date_inconsistencies,
+      0L,
+      paste0(
+        "One or more patients have inconsistent GK enrollment status and ",
+        "enrollment-date values."
+      )
+    ),
+    make_pipeline_check(
+      "reviewed_records_within_study_cutoffs",
+      "Cohort",
+      "ERROR",
+      reviewed_after_cutoff == 0L,
+      reviewed_after_cutoff,
+      0L,
+      "One or more reviewed records occur after the admission/review cutoff."
+    ),
+    make_pipeline_check(
       "test_record_counts_reconcile",
       "Testing",
       "ERROR",
@@ -221,6 +271,46 @@ build_pipeline_checks <- function(
       tested_without_primary_order_date,
       0L,
       "One or more tested patients lack a usable primary order date."
+    ),
+    make_pipeline_check(
+      "official_results_have_result_date",
+      "Testing",
+      "WARNING",
+      official_results_without_date == 0L,
+      official_results_without_date,
+      0L,
+      paste0(
+        "One or more official laboratory classifications lack a result date; ",
+        "they remain eligible for diagnostic analysis but not result-timing ",
+        "analysis."
+      )
+    ),
+    make_pipeline_check(
+      "test_records_within_data_freeze",
+      "Testing",
+      "WARNING",
+      after_freeze_record_count == 0L,
+      after_freeze_record_count,
+      0L,
+      "One or more testing records occur after the configured data freeze."
+    ),
+    make_pipeline_check(
+      "first_week_review_count_matches_methods",
+      "Implementation",
+      "WARNING",
+      config$data_mode != "real" || first_week_review_count == 25L,
+      first_week_review_count,
+      25L,
+      "The first-week review count does not match the methods description."
+    ),
+    make_pipeline_check(
+      "startup_backlog_count_matches_methods",
+      "Implementation",
+      "WARNING",
+      config$data_mode != "real" || startup_backlog_count == 23L,
+      startup_backlog_count,
+      23L,
+      "The startup-backlog count does not match the methods description."
     ),
     make_pipeline_check(
       "calendar_fields_use_original_dates",
