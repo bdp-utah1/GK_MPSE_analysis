@@ -63,7 +63,7 @@ build_cohort_flow <- function(cohorts) {
     ),
     make_count_row(
       "Testing",
-      "No testing record",
+      "Untested",
       counts$not_tested,
       counts$reviewed,
       "Reviewed"
@@ -77,7 +77,7 @@ build_cohort_flow <- function(cohorts) {
     ),
     make_count_row(
       "Results",
-      "No adjudicated classifiable result",
+      "Result value awaiting adjudication",
       counts$not_classifiable,
       counts$tested,
       "Tested"
@@ -125,10 +125,10 @@ build_cohort_flow <- function(cohorts) {
     "reviewed", "Clinician reviewed", 2, 1.2, counts$reviewed,
     "not_reviewed", "Not reviewed", 2, -1.2, counts$not_reviewed,
     "tested", "Any genetic testing", 3, 2.0, counts$tested,
-    "not_tested", "No testing record", 3, 0.3, counts$not_tested,
+    "not_tested", "Untested", 3, 0.3, counts$not_tested,
     "classifiable", "Classifiable result without\nunmatched values", 4, 2.8,
       counts$classifiable,
-    "not_classifiable", "No adjudicated\nclassifiable result", 4, 1.2,
+    "not_classifiable", "Result value awaiting\nadjudication", 4, 1.2,
       counts$not_classifiable,
     "positive", "Positive", 5, 3.6, counts$positive,
     "uncertain", "Uncertain", 5, 2.8, counts$uncertain,

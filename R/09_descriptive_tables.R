@@ -260,15 +260,12 @@ make_reviewed_characteristics_table <- function(cohorts) {
       testing_summary = dplyr::case_when(
         .data$has_wgs ~ "WGS",
         .data$has_any_test ~ "Non-WGS testing only",
-        TRUE ~ "No testing record"
+        TRUE ~ "Untested"
       ),
       result_summary = dplyr::case_when(
         .data$has_unmapped_result ~ "Unmatched result value",
         !is.na(.data$patient_result) ~ .data$patient_result,
-        .data$has_completed_result_record ~
-          "Completed result without classifiable value",
-        .data$has_any_test ~ "Pending or incomplete result",
-        TRUE ~ "No testing record"
+        TRUE ~ "Untested"
       )
     ) |>
     expand_summary_groups("review_percentile_group")

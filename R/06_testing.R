@@ -14,6 +14,30 @@ highest_classifiable_result <- function(result, eligible, hierarchy) {
   values[[which.max(ranks)]]
 }
 
+select_primary_test_records <- function(records, raw_columns, hierarchy) {
+  raw_columns <- intersect(raw_columns, names(records))
+
+  records |>
+    dplyr::filter(.data$test_in_analysis_window) |>
+    dplyr::mutate(
+      result_priority = dplyr::coalesce(
+        as.integer(unname(hierarchy[.data$diagnosis_by_lab])),
+        0L
+      )
+    ) |>
+    dplyr::arrange(
+      .data$project_id,
+      dplyr::desc(.data$is_wgs),
+      dplyr::desc(.data$result_priority),
+      .data$order_submitted_date,
+      .data$result_date_date
+    ) |>
+    dplyr::group_by(.data$project_id) |>
+    dplyr::slice_head(n = 1L) |>
+    dplyr::ungroup() |>
+    dplyr::select(dplyr::all_of(raw_columns))
+}
+
 date_within_outcome_window <- function(date, config) {
   if (config$data_mode == "real") {
     is.na(date) | date <= config$dates$data_freeze
@@ -24,6 +48,7 @@ date_within_outcome_window <- function(date, config) {
 
 prepare_test_records <- function(test_results, reviewed_patients, config) {
   normalized_wgs <- tolower(config$rules$wgs_tests)
+  normalized_valid_statuses <- tolower(config$rules$valid_test_statuses)
   classifiable_results <- names(config$rules$result_hierarchy)
 
   test_results |>
@@ -36,16 +61,22 @@ prepare_test_records <- function(test_results, reviewed_patients, config) {
       by = "project_id"
     ) |>
     dplyr::mutate(
+      test_status = blank_to_na(.data$test_status),
       genetic_test = blank_to_na(.data$genetic_test),
       diagnosis_by_lab = blank_to_na(.data$diagnosis_by_lab),
+      normalized_test_status = tolower(
+        stringr::str_squish(.data$test_status)
+      ),
+      valid_test_status = !is.na(.data$normalized_test_status) &
+        .data$normalized_test_status %in% normalized_valid_statuses,
+      valid_test_record = .data$valid_test_status &
+        !is.na(.data$diagnosis_by_lab),
       normalized_test = tolower(stringr::str_squish(.data$genetic_test)),
       is_wgs = !is.na(.data$normalized_test) &
         .data$normalized_test %in% normalized_wgs,
       result_is_classifiable = .data$diagnosis_by_lab %in% classifiable_results,
-      test_in_analysis_window = date_within_outcome_window(
-        .data$order_submitted_date,
-        config
-      ),
+      test_in_analysis_window = .data$valid_test_record &
+        date_within_outcome_window(.data$order_submitted_date, config),
       result_in_analysis_window = .data$test_in_analysis_window &
         date_within_outcome_window(.data$result_date_date, config),
       official_result_available = !is.na(.data$diagnosis_by_lab) &
@@ -53,6 +84,8 @@ prepare_test_records <- function(test_results, reviewed_patients, config) {
       classifiable_result_available = .data$result_is_classifiable &
         .data$result_in_analysis_window,
       order_timing_from_review = dplyr::case_when(
+        !.data$valid_test_status ~ "Excluded test status",
+        !.data$valid_test_record ~ "Ignored: missing diagnosis",
         !.data$test_in_analysis_window ~ "After data freeze",
         is.na(.data$order_submitted_date) ~ "Unknown order date",
         is.na(.data$review_date) ~ "Unknown review date",
@@ -60,6 +93,8 @@ prepare_test_records <- function(test_results, reviewed_patients, config) {
         TRUE ~ "Post-review"
       ),
       result_completion_status = dplyr::case_when(
+        !.data$valid_test_status ~ "Excluded test status",
+        !.data$valid_test_record ~ "Ignored: missing diagnosis",
         .data$official_result_available & !is.na(.data$result_date_date) ~
           "Result date and classification recorded",
         .data$official_result_available ~ "Classification only",
@@ -73,6 +108,7 @@ prepare_test_records <- function(test_results, reviewed_patients, config) {
 }
 
 summarize_test_results <- function(test_results, reviewed_patients, config) {
+  raw_test_columns <- names(test_results)
   prepared <- prepare_test_records(test_results, reviewed_patients, config)
   hierarchy <- config$rules$result_hierarchy
 
@@ -80,6 +116,8 @@ summarize_test_results <- function(test_results, reviewed_patients, config) {
     dplyr::group_by(.data$project_id) |>
     dplyr::summarise(
       test_record_count = dplyr::n(),
+      eligible_status_record_count = sum(.data$valid_test_status),
+      valid_test_record_count = sum(.data$valid_test_record),
       analysis_test_record_count = sum(.data$test_in_analysis_window),
       has_any_test = any(.data$test_in_analysis_window),
       has_wgs = any(.data$is_wgs & .data$test_in_analysis_window),
@@ -88,11 +126,13 @@ summarize_test_results <- function(test_results, reviewed_patients, config) {
           !is.na(.data$genetic_test) &
           .data$test_in_analysis_window
       ),
-      has_test_with_missing_name = any(is.na(.data$genetic_test)),
-      primary_test_type = dplyr::if_else(
-        any(.data$is_wgs & .data$test_in_analysis_window),
-        "WGS",
-        "Non-WGS"
+      has_test_with_missing_name = any(
+        .data$test_in_analysis_window & is.na(.data$genetic_test)
+      ),
+      primary_test_type = dplyr::case_when(
+        any(.data$is_wgs & .data$test_in_analysis_window) ~ "WGS",
+        any(.data$test_in_analysis_window) ~ "Non-WGS",
+        TRUE ~ "No testing"
       ),
       first_any_order_date = min_date_or_na(
         .data$order_submitted_date[.data$test_in_analysis_window]
@@ -199,15 +239,38 @@ summarize_test_results <- function(test_results, reviewed_patients, config) {
     dplyr::filter(.data$test_in_analysis_window, is.na(.data$genetic_test)) |>
     dplyr::count(.data$genetic_test, name = "test_record_count")
 
-  after_freeze_qc <- prepared |>
+  excluded_status_qc <- prepared |>
+    dplyr::filter(!.data$valid_test_status) |>
+    dplyr::count(.data$test_status, name = "test_record_count") |>
+    dplyr::arrange(dplyr::desc(.data$test_record_count), .data$test_status)
+
+  valid_status_missing_result_qc <- prepared |>
     dplyr::filter(
-      !.data$test_in_analysis_window |
-        (!is.na(.data$result_date_date) &
-          config$data_mode == "real" &
-          .data$result_date_date > config$dates$data_freeze)
+      .data$valid_test_status,
+      is.na(.data$diagnosis_by_lab)
     ) |>
     dplyr::select(
       project_id,
+      test_status,
+      genetic_test,
+      order_submitted_date,
+      result_date_date,
+      diagnosis_by_lab
+    )
+
+  after_freeze_qc <- prepared |>
+    dplyr::filter(
+      .data$valid_test_record &
+        (
+          !date_within_outcome_window(.data$order_submitted_date, config) |
+            (!is.na(.data$result_date_date) &
+              config$data_mode == "real" &
+              .data$result_date_date > config$dates$data_freeze)
+        )
+    ) |>
+    dplyr::select(
+      project_id,
+      test_status,
       genetic_test,
       order_submitted_date,
       result_date_date,
@@ -216,11 +279,20 @@ summarize_test_results <- function(test_results, reviewed_patients, config) {
       result_in_analysis_window
     )
 
+  primary_records <- select_primary_test_records(
+    prepared,
+    raw_test_columns,
+    hierarchy
+  )
+
   list(
     records = prepared,
     patient_summary = patient_summary,
+    primary_records = primary_records,
     result_value_qc = result_value_qc,
     test_name_qc = test_name_qc,
+    excluded_status_qc = excluded_status_qc,
+    valid_status_missing_result_qc = valid_status_missing_result_qc,
     after_freeze_qc = after_freeze_qc
   )
 }

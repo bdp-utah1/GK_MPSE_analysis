@@ -63,9 +63,10 @@ analysis_config <- function(data_mode = NULL, project_root = getwd()) {
       regression_confidence_level = 0.95,
       percentile_regression_scale = 10,
       raw_score_regression_scale = 10,
-      expected_screened_patients = 314L,
-      expected_reviewed_patients = 254L,
+      expected_screened_patients = 305L,
+      expected_reviewed_patients = 256L,
       other_recommendation_result_project_ids = c("8146"),
+      valid_test_statuses = c("Completed", "New Result"),
       wgs_tests = c(
         "WGS", "WGS reanalysis", "rWGS", "rWGS Reanalysis", "urWGS"
       ),

@@ -146,8 +146,8 @@ import_analysis_sources <- function(config) {
   assert_required_columns(
     tests,
     c(
-      "project_id", "genetic_test", "order_submitted", "result_date",
-      "diagnosis_by_lab"
+      "project_id", "test_status", "genetic_test", "order_submitted",
+      "result_date", "diagnosis_by_lab"
     ),
     "test results data"
   )
@@ -227,7 +227,10 @@ import_analysis_sources <- function(config) {
     apply_mrn_crosswalk("patient_id", crosswalk)
 
   tests <- tests |>
-    dplyr::mutate(project_id = blank_to_na(.data$project_id)) |>
+    dplyr::mutate(
+      project_id = blank_to_na(.data$project_id),
+      test_status = blank_to_na(.data$test_status)
+    ) |>
     add_date_copy("data_group_record_date", "data_group_record_date_date") |>
     add_date_copy("order_submitted", "order_submitted_date") |>
     add_date_copy("result_date", "result_date_date")

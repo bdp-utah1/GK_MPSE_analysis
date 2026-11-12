@@ -66,8 +66,14 @@ build_pipeline_checks <- function(
     nrow()
   unmapped_result_records <- test_summary$records |>
     dplyr::filter(
-      !is.na(.data$diagnosis_by_lab),
+      .data$official_result_available,
       !.data$result_is_classifiable
+    ) |>
+    nrow()
+  valid_test_records_without_result <- test_summary$records |>
+    dplyr::filter(
+      .data$valid_test_status,
+      is.na(.data$diagnosis_by_lab)
     ) |>
     nrow()
   tested_without_primary_order_date <- reviewed |>
@@ -219,6 +225,18 @@ build_pipeline_checks <- function(
       nrow(test_count_mismatches),
       0L,
       "Recorded and observed test-result row counts do not reconcile."
+    ),
+    make_pipeline_check(
+      "eligible_status_records_have_result_classification",
+      "Testing",
+      "WARNING",
+      valid_test_records_without_result == 0L,
+      valid_test_records_without_result,
+      0L,
+      paste0(
+        "One or more Completed/New Result records lack diagnosis_by_lab and ",
+        "were ignored when deriving patient-level testing outcomes."
+      )
     ),
     make_pipeline_check(
       "review_score_within_carry_window",

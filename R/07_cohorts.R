@@ -279,15 +279,31 @@ build_analysis_cohorts <- function(
   list(screened = screened, reviewed = reviewed)
 }
 
-write_cohort_outputs <- function(cohorts, config) {
-  reviewed_output <- cohorts$reviewed |>
-    dplyr::select(
+write_cohort_outputs <- function(
+    cohorts,
+    sources,
+    admission_matches,
+    test_summary,
+    config) {
+  screened_base <- cohorts$screened |>
+    dplyr::transmute(
+      screened_record = dplyr::row_number(),
+      patient_id,
       project_id,
-      proband_gender,
-      age_at_admission_days,
+      reviewed,
       selected_unit,
+      selected_arrive_date,
+      selected_dischg_date,
       admission_match_method,
       arrival_distance_days,
+      admission_candidate_count,
+      admission_match_review_flag,
+      date_shifted_calendar_fields_provisional
+    )
+
+  reviewed_derived <- cohorts$reviewed |>
+    dplyr::transmute(
+      patient_id = mrn,
       implementation_phase,
       backlog_patient,
       startup_backlog_patient,
@@ -321,57 +337,122 @@ write_cohort_outputs <- function(cohorts, config) {
       eligible_for_post_review_wgs,
       post_review_wgs,
       primary_test_type,
-      has_completed_result_record,
-      has_classifiable_completed_result,
-      has_completed_wgs_result_record,
-      has_classifiable_completed_wgs_result,
       has_unmapped_result,
       has_unmapped_wgs_result,
       has_official_result_missing_date,
       has_official_wgs_result_missing_date,
       patient_result,
       wgs_patient_result,
-      days_admission_to_review,
-      days_admission_to_referral,
-      days_review_to_referral,
-      days_admission_to_genetics_consult,
-      days_review_to_genetics_consult,
-      days_admission_to_test_order,
-      days_review_to_test_order,
-      days_admission_to_post_review_any_order,
-      days_review_to_post_review_any_order,
-      days_admission_to_post_review_wgs_order,
-      days_review_to_post_review_wgs_order,
       genetics_consult_timing,
       gk_referral_timing,
       referral_timing_from_review,
       test_timing_from_review,
-      date_shifted_calendar_fields_provisional
+      demographic_dob_discrepancy,
+      demographic_sex_discrepancy
     )
 
-  readr::write_csv(
-    reviewed_output,
-    file.path(config$output_dirs$data, "reviewed_cohort_analysis.csv"),
-    na = ""
-  )
+  mpse_patient_raw <- sources$mpse_patients |>
+    dplyr::select(
+      -dplyr::ends_with("_date"),
+      -dplyr::any_of(c("sex", "dob"))
+    ) |>
+    dplyr::rename_with(
+      ~ paste0("mpse_patient_raw_", .x),
+      -patient_id
+    )
 
-  screened_output <- cohorts$screened |>
+  reviewed_patient_raw <- sources$reviewed_patients |>
+    dplyr::select(
+      -dplyr::any_of(
+        c(
+          "project_id",
+          "project_name",
+          "in_collection_1607",
+          "in_collection_1716",
+          "dob_date",
+          "mpse_admit_date_date",
+          "mpse_genetic_consult_date_date",
+          "mpse_review_date_date",
+          "gk_approval_date_date",
+          "gk_referral_received_date_date",
+          "gk_enrollment_date_date",
+          "mpse_cp_score",
+          "mpse_cp_percent",
+          "mpse_rec",
+          "mpse_rec_result",
+          "gk_enrollment_status",
+          "gk_enrollment_type"
+        )
+      )
+    ) |>
+    dplyr::rename_with(
+      ~ paste0("reviewed_raw_", .x),
+      -mrn
+    )
+
+  selected_admission_raw <- admission_matches$selected |>
     dplyr::transmute(
-      screened_record = dplyr::row_number(),
-      project_id = .data$project_id,
-      reviewed = .data$reviewed,
-      sex = .data$sex,
-      age_at_admission_days = .data$age_at_admission_days,
-      selected_unit = .data$selected_unit,
-      admission_match_method = .data$admission_match_method,
-      arrival_distance_days = .data$arrival_distance_days,
-      date_shifted_calendar_fields_provisional =
-        .data$date_shifted_calendar_fields_provisional
+      patient_id,
+      admission_raw_arrive_dtm = selected_arrive_dtm,
+      admission_raw_dischg_dtm = selected_dischg_dtm
     )
 
+  primary_test_raw <- test_summary$primary_records |>
+    dplyr::select(
+      -dplyr::any_of(
+        c(
+          "project_name",
+          "data_group_id",
+          "data_group_name",
+          "data_group_instance_id",
+          "data_group_record_number",
+          "data_group_record_date",
+          "unrecognized_data_group_value_count",
+          "data_group_record_date_date",
+          "order_submitted_date",
+          "result_date_date"
+        )
+      )
+    ) |>
+    dplyr::rename_with(
+      ~ paste0("primary_test_raw_", .x),
+      -project_id
+    )
+
+  master_output <- screened_base |>
+    dplyr::left_join(mpse_patient_raw, by = "patient_id") |>
+    dplyr::left_join(
+      reviewed_patient_raw,
+      by = c("patient_id" = "mrn")
+    ) |>
+    dplyr::left_join(selected_admission_raw, by = "patient_id") |>
+    dplyr::left_join(reviewed_derived, by = "patient_id") |>
+    dplyr::left_join(primary_test_raw, by = "project_id") |>
+    dplyr::select(
+      -dplyr::starts_with("days_")
+    )
+
+  if (
+    nrow(master_output) != nrow(cohorts$screened) ||
+      dplyr::n_distinct(master_output$patient_id) != nrow(master_output)
+  ) {
+    stop(
+      "The master cohort export does not contain one row per screened patient.",
+      call. = FALSE
+    )
+  }
+
   readr::write_csv(
-    screened_output,
-    file.path(config$output_dirs$data, "screened_cohort_analysis.csv"),
+    master_output,
+    file.path(config$output_dirs$data, "master_cohort_analysis.csv"),
     na = ""
   )
+
+  obsolete_exports <- file.path(
+    config$output_dirs$data,
+    c("reviewed_cohort_analysis.csv", "screened_cohort_analysis.csv")
+  )
+  invisible(file.remove(obsolete_exports[file.exists(obsolete_exports)]))
+
+  master_output
 }

@@ -42,6 +42,19 @@ The command writes QC checks to `output/qc/`, analytic extracts to
 `output/data/`, descriptive and regression CSV/HTML tables to `output/tables/`,
 and cohort-flow and regression figures to `output/figures/`.
 
+`output/data/master_cohort_analysis.csv` is the primary patient-level export.
+It contains one row per screened patient and combines screened- and reviewed-
+cohort variables. It retains raw MPSE patient fields, raw clinical-review fields,
+the selected admission record, and the nonredundant raw fields from the
+prioritized usable test record. Requested administrative metadata, duplicate
+copies of canonical analysis fields, and parser-generated date copies are
+omitted. Raw-source fields are labeled with `mpse_patient_raw_`,
+`reviewed_raw_`, `admission_raw_`, or `primary_test_raw_` prefixes where needed
+to preserve source provenance and avoid ambiguous duplicate names. Derived
+day-interval variables are intentionally omitted because they can be calculated
+from the retained raw dates. Individual test-result rows remain in the source
+test-results file because that source is one-to-many by patient.
+
 `output/data/admission_match_manifest.csv` contains one row per screened patient
 with the admission-matching target, selected admission, ranking fields, candidate
 counts, and review flag. It intentionally retains patient linkage so the selected
@@ -82,6 +95,14 @@ Binary testing and result outcomes use logistic regression. Testing outcomes are
 post-review outcomes: same-day orders count as post-review, the any-testing risk
 set excludes patients with any pre-review test, and the WGS risk set excludes only
 patients with pre-review WGS. Orders with missing dates remain temporally unknown.
+Only test records with `test_status` equal to `Completed` or `New Result` are
+eligible for testing and result analyses; the two statuses have equal priority.
+An eligible-status record must also have a nonmissing `diagnosis_by_lab` value to
+be used. All other test-status rows, and eligible-status rows without a diagnosis,
+are retained for audit but ignored analytically. A patient with no usable row is
+classified as untested; there is no incomplete testing category. Among usable
+records, WGS takes priority over non-WGS testing, and multiple results use the
+configured Positive > Uncertain > Negative hierarchy.
 Observed nonnegative consultation, referral, and test-order intervals use linear
 regression. Patients without a documented event/date are not assigned a censoring
 time, so these are not survival models. Pre-existing events are excluded from

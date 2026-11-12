@@ -87,7 +87,7 @@ make_missingness_summary <- function(sources) {
       "gk_enrollment_date_date"
     ),
     test_results = c(
-      "project_id", "genetic_test", "order_submitted_date",
+      "project_id", "test_status", "genetic_test", "order_submitted_date",
       "result_date_date", "diagnosis_by_lab"
     ),
     mpse_patients = c(
