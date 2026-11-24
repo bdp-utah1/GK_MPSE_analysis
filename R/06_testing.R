@@ -112,10 +112,34 @@ summarize_test_results <- function(test_results, reviewed_patients, config) {
   prepared <- prepare_test_records(test_results, reviewed_patients, config)
   hierarchy <- config$rules$result_hierarchy
 
+  primary_records <- select_primary_test_records(
+    prepared,
+    raw_test_columns,
+    hierarchy
+  )
+
+  adjudicated_results <- primary_records |>
+    dplyr::transmute(
+      project_id,
+      patient_result = diagnosis_by_lab
+    )
+
   patient_summary <- prepared |>
     dplyr::group_by(.data$project_id) |>
     dplyr::summarise(
-      test_record_count = dplyr::n(),
+      total_test_record_count = dplyr::n(),
+      positive_test_count = sum(
+        .data$diagnosis_by_lab == "Positive",
+        na.rm = TRUE
+      ),
+      negative_test_count = sum(
+        .data$diagnosis_by_lab == "Negative",
+        na.rm = TRUE
+      ),
+      uncertain_test_count = sum(
+        .data$diagnosis_by_lab == "Uncertain",
+        na.rm = TRUE
+      ),
       eligible_status_record_count = sum(.data$valid_test_status),
       valid_test_record_count = sum(.data$valid_test_record),
       analysis_test_record_count = sum(.data$test_in_analysis_window),
@@ -214,18 +238,15 @@ summarize_test_results <- function(test_results, reviewed_patients, config) {
           .data$official_result_available &
           is.na(.data$result_date_date)
       ),
-      patient_result = highest_classifiable_result(
-        .data$diagnosis_by_lab,
-        .data$classifiable_result_available,
-        hierarchy
-      ),
       wgs_patient_result = highest_classifiable_result(
         .data$diagnosis_by_lab,
         .data$classifiable_result_available & .data$is_wgs,
         hierarchy
       ),
       .groups = "drop"
-    )
+    ) |>
+    dplyr::left_join(adjudicated_results, by = "project_id") |>
+    dplyr::relocate("patient_result", .before = "wgs_patient_result")
 
   result_value_qc <- prepared |>
     dplyr::filter(
@@ -279,12 +300,6 @@ summarize_test_results <- function(test_results, reviewed_patients, config) {
       result_in_analysis_window
     )
 
-  primary_records <- select_primary_test_records(
-    prepared,
-    raw_test_columns,
-    hierarchy
-  )
-
   list(
     records = prepared,
     patient_summary = patient_summary,
@@ -307,7 +322,10 @@ reconcile_test_record_counts <- function(reviewed_patients, patient_summary) {
     ) |>
     dplyr::left_join(
       patient_summary |>
-        dplyr::select(project_id, observed_test_count = test_record_count),
+        dplyr::select(
+          project_id,
+          observed_test_count = total_test_record_count
+        ),
       by = "project_id"
     ) |>
     dplyr::mutate(

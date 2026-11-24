@@ -111,6 +111,36 @@ build_pipeline_checks <- function(
   reviewed_not_in_screened <- sum(
     !sources$reviewed_patients$mrn %in% sources$mpse_patients$patient_id
   )
+  adjudicated_result_mismatches <- test_summary$patient_summary |>
+    dplyr::select(project_id, patient_result) |>
+    dplyr::full_join(
+      test_summary$primary_records |>
+        dplyr::transmute(
+          project_id,
+          selected_record_result = diagnosis_by_lab
+        ),
+      by = "project_id"
+    ) |>
+    dplyr::filter(
+      !(
+        is.na(.data$patient_result) &
+          is.na(.data$selected_record_result)
+      ),
+      is.na(.data$patient_result) |
+        is.na(.data$selected_record_result) |
+        .data$patient_result != .data$selected_record_result
+    ) |>
+    nrow()
+  invalid_result_counts <- test_summary$patient_summary |>
+    dplyr::filter(
+      .data$positive_test_count < 0L |
+        .data$negative_test_count < 0L |
+        .data$uncertain_test_count < 0L |
+        .data$positive_test_count +
+          .data$negative_test_count +
+          .data$uncertain_test_count > .data$total_test_record_count
+    ) |>
+    nrow()
 
   dplyr::bind_rows(
     make_pipeline_check(
@@ -220,11 +250,35 @@ build_pipeline_checks <- function(
     make_pipeline_check(
       "test_record_counts_reconcile",
       "Testing",
-      "ERROR",
+      "WARNING",
       nrow(test_count_mismatches) == 0L,
       nrow(test_count_mismatches),
       0L,
-      "Recorded and observed test-result row counts do not reconcile."
+      paste0(
+        "The patient-file test count differs from the authoritative number ",
+        "of rows in the test-results file for one or more patients."
+      )
+    ),
+    make_pipeline_check(
+      "diagnostic_result_uses_selected_test_record",
+      "Testing",
+      "ERROR",
+      adjudicated_result_mismatches == 0L,
+      adjudicated_result_mismatches,
+      0L,
+      paste0(
+        "One or more patient results differ from the WGS- and result-",
+        "prioritized test record."
+      )
+    ),
+    make_pipeline_check(
+      "diagnostic_result_counts_valid",
+      "Testing",
+      "ERROR",
+      invalid_result_counts == 0L,
+      invalid_result_counts,
+      0L,
+      "One or more patient-level diagnostic counts are invalid."
     ),
     make_pipeline_check(
       "eligible_status_records_have_result_classification",

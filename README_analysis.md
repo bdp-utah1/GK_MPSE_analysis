@@ -44,7 +44,10 @@ and cohort-flow and regression figures to `output/figures/`.
 
 `output/data/master_cohort_analysis.csv` is the primary patient-level export.
 It contains one row per screened patient and combines screened- and reviewed-
-cohort variables. It retains raw MPSE patient fields, raw clinical-review fields,
+cohort variables. The canonical `dob` and `gender` fields use reviewed-patient
+data when available and otherwise use MPSE patient data, so they are populated
+for reviewed and unreviewed patients without retaining duplicate source columns.
+It retains raw MPSE patient fields, raw clinical-review fields,
 the selected admission record, and the nonredundant raw fields from the
 prioritized usable test record. Requested administrative metadata, duplicate
 copies of canonical analysis fields, and parser-generated date copies are
@@ -102,7 +105,13 @@ be used. All other test-status rows, and eligible-status rows without a diagnosi
 are retained for audit but ignored analytically. A patient with no usable row is
 classified as untested; there is no incomplete testing category. Among usable
 records, WGS takes priority over non-WGS testing, and multiple results use the
-configured Positive > Uncertain > Negative hierarchy.
+configured Positive > Uncertain > Negative hierarchy. The resulting
+`patient_result` is the single authoritative patient-level diagnostic category
+in the master export. The raw diagnosis from the selected test record is not
+exported as a second outcome column. The master export also reports total test
+records and Positive, Negative, and Uncertain record counts from the complete
+test-results source, regardless of completeness or `test_status`; ineligible
+records contribute to these audit counts but not to `patient_result`.
 Observed nonnegative consultation, referral, and test-order intervals use linear
 regression. Patients without a documented event/date are not assigned a censoring
 time, so these are not survival models. Pre-existing events are excluded from

@@ -8,6 +8,9 @@ last_review_date <- as.Date("2026-06-02")
 defunct_mrn_4879 <- "X014455166"
 current_mrn_4879 <- "X014453675"
 
+defunct_mrn_4877 <- "X014526816"
+current_mrn_4877 <- "X014378282"
+
 cern_unmerged_mrn_4048 <- "650480153"
 epic_unmerged_mrn_4048 <- "X014183906"
 
@@ -24,7 +27,8 @@ study_period_total_screened <- read_tsv("/home/bennet/Documents/phd/yandell/gene
   filter((dischg_dtm > frst_review_date) | (patient_id %in% cohort_ids$mrn)) %>% 
   filter((arrive_dtm < last_review_date) | (patient_id %in% cohort_ids$mrn)) %>% 
   filter((arrive_dtm >= scoring_process_change) | (patient_id %in% cohort_ids$mrn)) %>% 
-  filter(patient_id != epic_unmerged_mrn_4048) %>% 
+  filter(patient_id != epic_unmerged_mrn_4048,
+         patient_id != defunct_mrn_4877) %>% 
   distinct(patient_id, .keep_all = TRUE)
 
 

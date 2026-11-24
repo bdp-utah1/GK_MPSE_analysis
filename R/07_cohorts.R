@@ -135,7 +135,22 @@ build_analysis_cohorts <- function(
       has_test_with_missing_name = dplyr::coalesce(
         .data$has_test_with_missing_name, FALSE
       ),
-      test_record_count = dplyr::coalesce(.data$test_record_count, 0L),
+      total_test_record_count = dplyr::coalesce(
+        .data$total_test_record_count,
+        0L
+      ),
+      positive_test_count = dplyr::coalesce(
+        .data$positive_test_count,
+        0L
+      ),
+      negative_test_count = dplyr::coalesce(
+        .data$negative_test_count,
+        0L
+      ),
+      uncertain_test_count = dplyr::coalesce(
+        .data$uncertain_test_count,
+        0L
+      ),
       primary_test_type = dplyr::coalesce(
         .data$primary_test_type, "No testing"
       ),
@@ -291,6 +306,8 @@ write_cohort_outputs <- function(
       patient_id,
       project_id,
       reviewed,
+      dob = analysis_dob_date,
+      gender = sex,
       selected_unit,
       selected_arrive_date,
       selected_dischg_date,
@@ -323,6 +340,10 @@ write_cohort_outputs <- function(
       gk_enrolled_before_review,
       eligible_for_post_review_gk_enrollment,
       post_review_gk_enrollment,
+      total_test_record_count,
+      positive_test_count,
+      negative_test_count,
+      uncertain_test_count,
       has_any_test,
       has_wgs,
       has_non_wgs,
@@ -342,7 +363,6 @@ write_cohort_outputs <- function(
       has_official_result_missing_date,
       has_official_wgs_result_missing_date,
       patient_result,
-      wgs_patient_result,
       genetics_consult_timing,
       gk_referral_timing,
       referral_timing_from_review,
@@ -369,6 +389,8 @@ write_cohort_outputs <- function(
           "project_name",
           "in_collection_1607",
           "in_collection_1716",
+          "dob",
+          "proband_gender",
           "dob_date",
           "mpse_admit_date_date",
           "mpse_genetic_consult_date_date",
@@ -381,7 +403,8 @@ write_cohort_outputs <- function(
           "mpse_rec",
           "mpse_rec_result",
           "gk_enrollment_status",
-          "gk_enrollment_type"
+          "gk_enrollment_type",
+          "test_results_record_count"
         )
       )
     ) |>
@@ -410,7 +433,8 @@ write_cohort_outputs <- function(
           "unrecognized_data_group_value_count",
           "data_group_record_date_date",
           "order_submitted_date",
-          "result_date_date"
+          "result_date_date",
+          "diagnosis_by_lab"
         )
       )
     ) |>
@@ -428,6 +452,19 @@ write_cohort_outputs <- function(
     dplyr::left_join(selected_admission_raw, by = "patient_id") |>
     dplyr::left_join(reviewed_derived, by = "patient_id") |>
     dplyr::left_join(primary_test_raw, by = "project_id") |>
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::all_of(
+          c(
+            "total_test_record_count",
+            "positive_test_count",
+            "negative_test_count",
+            "uncertain_test_count"
+          )
+        ),
+        ~ dplyr::coalesce(.x, 0L)
+      )
+    ) |>
     dplyr::select(
       -dplyr::starts_with("days_")
     )
@@ -438,6 +475,35 @@ write_cohort_outputs <- function(
   ) {
     stop(
       "The master cohort export does not contain one row per screened patient.",
+      call. = FALSE
+    )
+  }
+
+  demographic_check <- master_output |>
+    dplyr::select(patient_id, dob, gender) |>
+    dplyr::left_join(
+      cohorts$screened |>
+        dplyr::transmute(
+          patient_id,
+          expected_dob = analysis_dob_date,
+          expected_gender = sex
+        ),
+      by = "patient_id"
+    ) |>
+    dplyr::mutate(
+      dob_matches =
+        (is.na(.data$dob) & is.na(.data$expected_dob)) |
+          (!is.na(.data$dob) & !is.na(.data$expected_dob) &
+            .data$dob == .data$expected_dob),
+      gender_matches =
+        (is.na(.data$gender) & is.na(.data$expected_gender)) |
+          (!is.na(.data$gender) & !is.na(.data$expected_gender) &
+            .data$gender == .data$expected_gender)
+    )
+
+  if (any(!demographic_check$dob_matches | !demographic_check$gender_matches)) {
+    stop(
+      "The master cohort export did not preserve the unified cohort demographics.",
       call. = FALSE
     )
   }
