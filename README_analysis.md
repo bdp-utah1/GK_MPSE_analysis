@@ -47,6 +47,8 @@ It contains one row per screened patient and combines screened- and reviewed-
 cohort variables. The canonical `dob` and `gender` fields use reviewed-patient
 data when available and otherwise use MPSE patient data, so they are populated
 for reviewed and unreviewed patients without retaining duplicate source columns.
+The MPSE demographic source contributes `death_date`, `race`, `ethnicity`,
+`gest_age`, `coi_natrnk`, and `coi_staternk` for the full screened cohort.
 It retains raw MPSE patient fields, raw clinical-review fields,
 the selected admission record, and the nonredundant raw fields from the
 prioritized usable test record. Requested administrative metadata, duplicate

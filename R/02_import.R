@@ -130,6 +130,11 @@ import_analysis_sources <- function(config) {
   reviewed <- read_all_character(config$input_files$reviewed_patients, ",")
   tests <- read_all_character(config$input_files$test_results, ",")
   patients <- read_all_character(config$input_files$mpse_patients, "\t")
+  demographics <- read_all_character(
+    config$input_files$mpse_demographics,
+    ","
+  )
+  names(demographics) <- tolower(names(demographics))
   admissions <- read_all_character(config$input_files$mpse_admissions, "\t")
   scores <- read_scores_file(config$input_files$mpse_scores)
 
@@ -155,6 +160,14 @@ import_analysis_sources <- function(config) {
     patients,
     c("patient_id", "sex", "dob", "first_seen", "last_seen"),
     "MPSE patient data"
+  )
+  assert_required_columns(
+    demographics,
+    c(
+      "patient_id", "project_id", "death_date", "race", "ethnicity",
+      "gest_age", "coi_natrnk", "coi_staternk"
+    ),
+    "MPSE demographic data"
   )
   assert_required_columns(
     admissions,
@@ -211,6 +224,13 @@ import_analysis_sources <- function(config) {
     add_date_copy("first_seen", "first_seen_date") |>
     add_date_copy("last_seen", "last_seen_date")
 
+  demographics <- demographics |>
+    dplyr::mutate(
+      patient_id = blank_to_na(.data$patient_id),
+      project_id = blank_to_na(.data$project_id)
+    ) |>
+    apply_mrn_crosswalk("patient_id", crosswalk)
+
   admissions <- admissions |>
     dplyr::mutate(patient_id = blank_to_na(.data$patient_id)) |>
     apply_mrn_crosswalk("patient_id", crosswalk) |>
@@ -239,6 +259,7 @@ import_analysis_sources <- function(config) {
     reviewed_patients = reviewed,
     test_results = tests,
     mpse_patients = patients,
+    mpse_demographics = demographics,
     mpse_admissions = admissions,
     mpse_scores = scores,
     mrn_crosswalk = crosswalk

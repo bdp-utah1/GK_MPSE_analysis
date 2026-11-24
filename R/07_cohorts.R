@@ -63,6 +63,9 @@ build_analysis_cohorts <- function(
       mpse_admit_date_date
     )
 
+  additional_demographics <- sources$mpse_demographics |>
+    dplyr::select(-project_id)
+
   screened <- sources$mpse_patients |>
     dplyr::transmute(
       patient_id = .data$patient_id,
@@ -71,6 +74,7 @@ build_analysis_cohorts <- function(
       first_seen_date = .data$first_seen_date,
       last_seen_date = .data$last_seen_date
     ) |>
+    dplyr::left_join(additional_demographics, by = "patient_id") |>
     dplyr::left_join(reviewed_lookup, by = c("patient_id" = "mrn")) |>
     dplyr::left_join(admission_fields, by = "patient_id") |>
     dplyr::mutate(
@@ -107,6 +111,10 @@ build_analysis_cohorts <- function(
 
   reviewed <- reviewed_source |>
     dplyr::left_join(mpse_demographics, by = "mrn") |>
+    dplyr::left_join(
+      additional_demographics,
+      by = c("mrn" = "patient_id")
+    ) |>
     dplyr::left_join(admission_fields, by = c("mrn" = "patient_id")) |>
     dplyr::left_join(
       score_matches |>
@@ -308,6 +316,12 @@ write_cohort_outputs <- function(
       reviewed,
       dob = analysis_dob_date,
       gender = sex,
+      death_date,
+      race,
+      ethnicity,
+      gest_age,
+      coi_natrnk,
+      coi_staternk,
       selected_unit,
       selected_arrive_date,
       selected_dischg_date,

@@ -111,6 +111,33 @@ build_pipeline_checks <- function(
   reviewed_not_in_screened <- sum(
     !sources$reviewed_patients$mrn %in% sources$mpse_patients$patient_id
   )
+  demographic_duplicate_patient_ids <- count_duplicate_keys(
+    sources$mpse_demographics,
+    "patient_id"
+  )
+  demographic_ids_not_in_screened <- sum(
+    !sources$mpse_demographics$patient_id %in%
+      sources$mpse_patients$patient_id
+  )
+  screened_ids_without_demographics <- sum(
+    !sources$mpse_patients$patient_id %in%
+      sources$mpse_demographics$patient_id
+  )
+  demographic_project_id_mismatches <- sources$mpse_demographics |>
+    dplyr::filter(!is.na(.data$project_id)) |>
+    dplyr::left_join(
+      sources$reviewed_patients |>
+        dplyr::select(
+          patient_id = mrn,
+          reviewed_project_id = project_id
+        ),
+      by = "patient_id"
+    ) |>
+    dplyr::filter(
+      is.na(.data$reviewed_project_id) |
+        .data$project_id != .data$reviewed_project_id
+    ) |>
+    nrow()
   adjudicated_result_mismatches <- test_summary$patient_summary |>
     dplyr::select(project_id, patient_result) |>
     dplyr::full_join(
@@ -189,6 +216,40 @@ build_pipeline_checks <- function(
       reviewed_not_in_screened,
       0L,
       "One or more reviewed patients are absent from the MPSE patient file."
+    ),
+    make_pipeline_check(
+      "unique_demographic_patient_ids",
+      "Identifiers",
+      "ERROR",
+      demographic_duplicate_patient_ids == 0L,
+      demographic_duplicate_patient_ids,
+      0L,
+      "The MPSE demographic file contains duplicate patient identifiers."
+    ),
+    make_pipeline_check(
+      "demographic_file_covers_screened_cohort",
+      "Identifiers",
+      "ERROR",
+      demographic_ids_not_in_screened == 0L &
+        screened_ids_without_demographics == 0L,
+      demographic_ids_not_in_screened + screened_ids_without_demographics,
+      0L,
+      paste0(
+        "The MPSE demographic file and screened cohort do not contain the ",
+        "same patient identifiers."
+      )
+    ),
+    make_pipeline_check(
+      "demographic_project_ids_match_reviewed_cohort",
+      "Identifiers",
+      "ERROR",
+      demographic_project_id_mismatches == 0L,
+      demographic_project_id_mismatches,
+      0L,
+      paste0(
+        "One or more demographic project identifiers disagree with the ",
+        "reviewed-patient file."
+      )
     ),
     make_pipeline_check(
       "selected_admission_available",

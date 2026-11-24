@@ -16,6 +16,7 @@ analysis_config <- function(data_mode = NULL, project_root = getwd()) {
   file_sets <- list(
     synthetic = list(
       mpse_patients = "mpse_data/synthetic_mpse_patients.tsv",
+      mpse_demographics = "mpse_data/synthetic_mpse_demographics.csv",
       mpse_admissions = "mpse_data/synthetic_mpse_admissions.tsv",
       mpse_scores = "mpse_data/synthetic_mpse_scores.tsv",
       reviewed_patients = "mosaic_data/synthetic_patient_data.csv",
@@ -23,6 +24,7 @@ analysis_config <- function(data_mode = NULL, project_root = getwd()) {
     ),
     real = list(
       mpse_patients = "mpse_data/patient.tsv",
+      mpse_demographics = "mpse_data/mpse_demographics.csv",
       mpse_admissions = "mpse_data/patient_stay.tsv",
       mpse_scores = "mpse_data/patient_mpse_score.tsv",
       reviewed_patients = "mosaic_data/patient_level_data.csv",
@@ -63,7 +65,7 @@ analysis_config <- function(data_mode = NULL, project_root = getwd()) {
       regression_confidence_level = 0.95,
       percentile_regression_scale = 10,
       raw_score_regression_scale = 10,
-      expected_screened_patients = 305L,
+      expected_screened_patients = 304L,
       expected_reviewed_patients = 256L,
       other_recommendation_result_project_ids = c("8146"),
       valid_test_statuses = c("Completed", "New Result"),

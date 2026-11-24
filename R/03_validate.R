@@ -19,6 +19,17 @@ make_import_summary <- function(sources) {
       unique_projects = NA_integer_
     ),
     tibble::tibble(
+      dataset = "mpse_demographics",
+      rows = nrow(sources$mpse_demographics),
+      unique_patients = dplyr::n_distinct(
+        sources$mpse_demographics$patient_id
+      ),
+      unique_projects = dplyr::n_distinct(
+        sources$mpse_demographics$project_id,
+        na.rm = TRUE
+      )
+    ),
+    tibble::tibble(
       dataset = "mpse_admissions",
       rows = nrow(sources$mpse_admissions),
       unique_patients = dplyr::n_distinct(sources$mpse_admissions$patient_id),
@@ -36,25 +47,43 @@ make_import_summary <- function(sources) {
 make_identifier_overlap <- function(sources) {
   reviewed_mrns <- unique(stats::na.omit(sources$reviewed_patients$mrn))
   reviewed_projects <- unique(stats::na.omit(sources$reviewed_patients$project_id))
+  demographic_projects <- unique(
+    stats::na.omit(sources$mpse_demographics$project_id)
+  )
 
   tibble::tibble(
     comparison = c(
       "reviewed MRNs found in MPSE patients",
       "reviewed MRNs found in MPSE admissions",
       "reviewed MRNs found in MPSE scores",
-      "test-result project IDs found in reviewed patients"
+      "test-result project IDs found in reviewed patients",
+      "MPSE demographic patient IDs found in MPSE patients",
+      "MPSE patient IDs found in MPSE demographics",
+      "MPSE demographic project IDs found in reviewed patients"
     ),
     reference_n = c(
       length(reviewed_mrns),
       length(reviewed_mrns),
       length(reviewed_mrns),
-      dplyr::n_distinct(sources$test_results$project_id, na.rm = TRUE)
+      dplyr::n_distinct(sources$test_results$project_id, na.rm = TRUE),
+      dplyr::n_distinct(sources$mpse_demographics$patient_id),
+      dplyr::n_distinct(sources$mpse_patients$patient_id),
+      length(demographic_projects)
     ),
     matched_n = c(
       sum(reviewed_mrns %in% sources$mpse_patients$patient_id),
       sum(reviewed_mrns %in% sources$mpse_admissions$patient_id),
       sum(reviewed_mrns %in% sources$mpse_scores$patient_id),
-      sum(unique(stats::na.omit(sources$test_results$project_id)) %in% reviewed_projects)
+      sum(unique(stats::na.omit(sources$test_results$project_id)) %in% reviewed_projects),
+      sum(
+        unique(sources$mpse_demographics$patient_id) %in%
+          sources$mpse_patients$patient_id
+      ),
+      sum(
+        unique(sources$mpse_patients$patient_id) %in%
+          sources$mpse_demographics$patient_id
+      ),
+      sum(demographic_projects %in% reviewed_projects)
     )
   ) |>
     dplyr::mutate(unmatched_n = .data$reference_n - .data$matched_n)
@@ -66,12 +95,20 @@ make_duplicate_key_summary <- function(sources) {
       "reviewed project_id",
       "reviewed MRN",
       "MPSE patient_id",
+      "MPSE demographic patient_id",
+      "MPSE demographic project_id",
       "MPSE patient_id + score_date"
     ),
     duplicate_key_groups = c(
       count_duplicate_keys(sources$reviewed_patients, "project_id"),
       count_duplicate_keys(sources$reviewed_patients, "mrn"),
       count_duplicate_keys(sources$mpse_patients, "patient_id"),
+      count_duplicate_keys(sources$mpse_demographics, "patient_id"),
+      count_duplicate_keys(
+        sources$mpse_demographics |>
+          dplyr::filter(!is.na(.data$project_id)),
+        "project_id"
+      ),
       count_duplicate_keys(sources$mpse_scores, c("patient_id", "score_date"))
     )
   )
@@ -92,6 +129,10 @@ make_missingness_summary <- function(sources) {
     ),
     mpse_patients = c(
       "patient_id", "sex", "dob_date", "first_seen_date", "last_seen_date"
+    ),
+    mpse_demographics = c(
+      "patient_id", "project_id", "death_date", "race", "ethnicity",
+      "gest_age", "coi_natrnk", "coi_staternk"
     ),
     mpse_admissions = c(
       "patient_id", "unit", "arrive_date", "dischg_date"
